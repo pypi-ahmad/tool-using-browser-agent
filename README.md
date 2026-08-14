@@ -156,3 +156,5 @@ The suite runs real headless-browser tests (multi-tab, locator resolution) and S
 ## License
 
 No license file is currently included. Add one (e.g. MIT) if you intend to distribute this project publicly.
+
+<p align="center">Made with ❤️ by Ahmad Mujtaba</p>
