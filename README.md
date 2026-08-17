@@ -2,7 +2,7 @@
 
 An autonomous, tool-using browser agent built with **LangGraph**, **Playwright**, and **Streamlit** — it plans, acts, observes, and remembers its way through real web tasks like price comparison, form filling, and competitor research, with a human-in-the-loop safety gate before any sensitive action.
 
-**Repository:** https://github.com/pypi-ahmad/tool-using-browser-agent
+**Repository:** [github.com/pypi-ahmad/tool-using-browser-agent](https://github.com/pypi-ahmad/tool-using-browser-agent)
 
 Free, open-source, and community-driven — clone it, run it on your own machine with your own API
 keys, and use it however you like. Bug reports, feature ideas, and pull requests are genuinely
@@ -14,6 +14,22 @@ welcome; see [Contributing & Community](#contributing--community) below.
 > when the vision fallback triggers. Only local Ollama handles the actual click/fill/navigate
 > execution first. You are fully responsible for the sites you point this at and the data involved.
 > Read [DISCLAIMER.md](DISCLAIMER.md) before running it on anything sensitive.
+
+## Contents
+
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [How It Works](#how-it-works)
+- [Installation & Setup](#installation--setup)
+- [Environment Variables](#environment-variables)
+- [Usage](#usage)
+- [Configuration Options](#configuration-options)
+- [Testing](#testing)
+- [Future Improvements](#future-improvements)
+- [Contributing & Community](#contributing--community)
+- [Disclaimer](#disclaimer)
+- [License](#license)
 
 ## Features
 
