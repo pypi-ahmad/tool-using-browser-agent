@@ -4,6 +4,17 @@ An autonomous, tool-using browser agent built with **LangGraph**, **Playwright**
 
 **Repository:** https://github.com/pypi-ahmad/tool-using-browser-agent
 
+Free, open-source, and community-driven — clone it, run it on your own machine with your own API
+keys, and use it however you like. Bug reports, feature ideas, and pull requests are genuinely
+welcome; see [Contributing & Community](#contributing--community) below.
+
+> [!IMPORTANT]
+> This agent's planner and reflector always call a cloud LLM (OpenAI or Agnes AI), sending your
+> task, open tab URLs, and truncated page-content summaries on every step — plus full screenshots
+> when the vision fallback triggers. Only local Ollama handles the actual click/fill/navigate
+> execution first. You are fully responsible for the sites you point this at and the data involved.
+> Read [DISCLAIMER.md](DISCLAIMER.md) before running it on anything sensitive.
+
 ## Features
 
 - **Full browser toolset** — `navigate`, `click`, `fill`, `extract_text`, `extract_table`, `extract_links`, `scroll`, `wait_for_selector`, `go_back`/`go_forward`, `screenshot`, and multi-tab control (`open_new_tab`, `switch_tab`, `list_tabs`, `close_tab`).
@@ -62,6 +73,9 @@ planner ─▶ (sensitive?) ─▶ human_approval ─▶ browser_actuator ─▶
                           (continue | finish)
 ```
 
+Non-sensitive actions skip `human_approval` entirely (`planner → browser_actuator` directly);
+only actions flagged sensitive enter the approval gate shown above.
+
 - **`planner`** (cloud model) — reads the task, recent history, and live browser tab state, and decides the single next concrete action. Flags the action as sensitive if it looks like a submit/payment step.
 - **`human_approval`** — only entered for sensitive actions. Uses LangGraph's `interrupt()` to pause the graph and surface the action for approval in the UI; resumes via `Command(resume="approve" | "reject")`.
 - **`browser_actuator`** — translates the instruction into a concrete tool call. Tries the local Ollama model first (fast path); if it fails to produce a valid tool call, escalates to the cloud model. Catches Playwright errors and flags the step for vision analysis instead of crashing the run.
@@ -95,7 +109,7 @@ Double-click **`run.cmd`**. It will:
 uv sync --all-groups
 uv run playwright install chromium
 cp .env.example .env   # then fill in your API key(s)
-uv run streamlit run app.py
+uv run streamlit run app.py --server.port 8511
 ```
 
 ## Environment Variables
@@ -152,6 +166,37 @@ The suite runs real headless-browser tests (multi-tab, locator resolution) and S
 - Parallel (concurrent, not just multi-tab-sequential) task execution across sites.
 - Semantic/fuzzy search over persistent memory (SQLite FTS5 or a vector store).
 - A persistent (non-in-memory) LangGraph checkpointer for durable, restart-safe approval flows.
+
+## Contributing & Community
+
+This project is free, open-source, and welcomes contributions of all sizes — bug reports, feature
+suggestions, documentation fixes, and code. It's maintained in spare time with no formal process,
+so don't overthink it: open an issue or a pull request.
+
+| Resource | Purpose |
+| --- | --- |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup, project layout, coding style, and how to submit a PR |
+| [Issues](https://github.com/pypi-ahmad/tool-using-browser-agent/issues) | Bug reports and feature requests (templates provided for both) |
+| [SUPPORT.md](SUPPORT.md) | Where to ask usage questions and what response time to expect |
+| [SECURITY.md](SECURITY.md) | How to report a security issue privately, and known risks of an LLM-driven browser agent |
+
+> [!NOTE]
+> This project does not want or accept donations, sponsorships, or any other financial support, and
+> never will. It's free to use and free to modify. If you'd like to give back, the most valuable
+> thing you can do is contribute code, tests, docs, or a well-written bug report.
+
+## Disclaimer
+
+- **You run this on your own machine, with your own API keys.** There is no hosted version and no
+  account system.
+- **You are 100% responsible for the sites you point this at and the data involved.** The cloud
+  planner receives your task, tab URLs, and truncated page content on every step; only local Ollama
+  handles execution first.
+- **AI-driven actions can be wrong.** The human-in-the-loop approval gate is a safety net, not a
+  guarantee — review every approval prompt.
+- **No warranty, no liability**, per the [MIT License](LICENSE) — use it at your own risk.
+
+See [DISCLAIMER.md](DISCLAIMER.md) for the full version.
 
 ## License
 
