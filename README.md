@@ -86,6 +86,8 @@ only actions flagged sensitive enter the approval gate shown above.
 
 The Streamlit UI runs the agent in a background thread with its own asyncio event loop (Playwright requires this), and streams the graph with `astream(stream_mode="updates")` so the UI updates after every single node, not just when the whole multi-step task completes.
 
+See **[TECHNICAL.md](TECHNICAL.md)** for the full architecture reference — module map, every node's exact behavior, model routing, locator resolution, and extension points.
+
 ## Installation & Setup
 
 ### Prerequisites
@@ -139,6 +141,8 @@ Both `OPENAI_API_KEY`/`OPENAI_BASE_URL` and `AGNES_API_KEY` are read from real e
 6. Use **Stop** to halt the run at any time.
 7. Once finished, download the extracted data as JSON or CSV, or browse/search everything ever extracted in the **Persistent memory browser** panel.
 
+See **[USAGE.md](USAGE.md)** for a full walkthrough, more example tasks, and a troubleshooting table mapping each error to its fix.
+
 ### Example tasks
 
 - "Compare iPhone 16 prices across Amazon and Flipkart."
@@ -159,7 +163,7 @@ Both `OPENAI_API_KEY`/`OPENAI_BASE_URL` and `AGNES_API_KEY` are read from real e
 uv run pytest tests/ -v
 ```
 
-The suite runs real headless-browser tests (multi-tab, locator resolution) and SQLite persistence roundtrips — no LLM or network access required.
+The suite runs real headless-browser tests (multi-tab, locator resolution), SQLite persistence roundtrips, and LangGraph routing/short-circuit logic (conditional edges, the max-steps force-finish) — no LLM or network access required.
 
 ## Future Improvements
 
@@ -175,6 +179,8 @@ so don't overthink it: open an issue or a pull request.
 
 | Resource | Purpose |
 | --- | --- |
+| [USAGE.md](USAGE.md) | Full how-to guide, more example tasks, and troubleshooting |
+| [TECHNICAL.md](TECHNICAL.md) | Architecture reference: module map, every node's behavior, extension points |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup, project layout, coding style, and how to submit a PR |
 | [Issues](https://github.com/pypi-ahmad/tool-using-browser-agent/issues) | Bug reports and feature requests (templates provided for both) |
 | [SUPPORT.md](SUPPORT.md) | Where to ask usage questions and what response time to expect |
