@@ -1,6 +1,15 @@
-"""Screenshot understanding via GPT vision. Only called when needs_vision is set
-(a selector failed, or the page looks broken/blocked, e.g. a cookie banner or
-anti-bot challenge) — not on every step.
+"""Screenshot understanding via multimodal vision models.
+
+Responsibility:
+- Format screenshot image data and task context into multimodal prompt messages.
+- Query vision-capable LLM to identify visual elements or unblock actions after DOM selector failures.
+
+What it must NOT do:
+- Must not capture screenshots directly or interact with browser instances.
+- Must not raise uncaught exceptions to caller (falls back gracefully to error strings).
+
+Next module to read:
+- graph.py (see observer_node, which invokes analyze_screenshot on selector failures).
 """
 
 from __future__ import annotations
