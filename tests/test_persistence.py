@@ -1,4 +1,17 @@
-"""SQLite roundtrip against a temp file. No LLM, no network."""
+"""SQLite roundtrip tests against temporary isolated databases. No LLM, no network.
+
+Responsibility:
+- Verify record insertion, deserialization, and recent record queries in SQLite.
+- Verify substring search across task, url, and data_json columns.
+- Verify session deduplication and disk persistence across distinct connections.
+
+What it must NOT do:
+- Must not touch production or default database paths (uses pytest tmp_path fixtures).
+- Must not make network or LLM calls.
+
+Next module to read:
+- persistence.py (implements SQLite schema creation and memory querying).
+"""
 
 from persistence import list_recent, list_sessions, save_record, search_memory
 

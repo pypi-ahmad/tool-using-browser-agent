@@ -2,8 +2,6 @@
 
 Guidelines for development and code contributions to the tool-using browser agent repository.
 
-The canonical documentation is located at [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
-
 ## Development environment setup
 
 1. Clone the repository and navigate to the project directory:

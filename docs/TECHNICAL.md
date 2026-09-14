@@ -2,8 +2,6 @@
 
 Technical reference covering the software stack, execution invariants, error-handling mechanisms, and persistence models.
 
-The canonical documentation is located at [docs/TECHNICAL.md](docs/TECHNICAL.md).
-
 ## Technology stack
 
 | Library / Tool | Primary location | Verification in code | Rationale based on implementation |

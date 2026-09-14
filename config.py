@@ -1,4 +1,16 @@
-"""Environment-driven settings and LLM factories. No hardcoded keys."""
+"""Environment-driven settings and LLM factories.
+
+Responsibility:
+- Parse and validate runtime environment variables and settings.
+- Construct configured LangChain chat model instances (OpenAI, Agnes AI, Ollama).
+
+What it must NOT do:
+- Must not hardcode credentials or secrets in source code or defaults.
+- Must not make LLM inference calls or execute browser actions directly.
+
+Next module to read:
+- graph.py (consumes LLM factory outputs for planner, actuator, and reflector nodes).
+"""
 
 from __future__ import annotations
 
@@ -65,6 +77,9 @@ class Settings:
 def ollama_available(
     base_url: str = DEFAULT_OLLAMA_BASE_URL, timeout: float = 1.5
 ) -> bool:
+    # Error boundary: probe local daemon connectivity with a short timeout.
+    # Swallows all network/connection exceptions (ConnectionRefusedError, TimeoutError, etc.)
+    # to return a binary availability flag without crashing caller startup.
     try:
         with urllib.request.urlopen(base_url, timeout=timeout):
             return True
@@ -73,6 +88,8 @@ def ollama_available(
 
 
 def _require_openai_key() -> tuple[str, str | None]:
+    # Invariant: OpenAI client initialization requires a non-empty key.
+    # Raises RuntimeError early before starting execution loop if missing.
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY environment variable is not set.")
@@ -80,6 +97,7 @@ def _require_openai_key() -> tuple[str, str | None]:
 
 
 def _require_agnes_key() -> str:
+    # Invariant: Agnes AI provider requires an explicit AGNES_API_KEY.
     api_key = os.environ.get("AGNES_API_KEY")
     if not api_key:
         raise RuntimeError("AGNES_API_KEY environment variable is not set.")

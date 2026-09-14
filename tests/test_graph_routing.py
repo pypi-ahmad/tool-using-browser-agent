@@ -1,4 +1,16 @@
-"""Pure conditional-edge / short-circuit logic. No LLM, no network, no browser."""
+"""Pure conditional-edge and short-circuit logic tests. No LLM, no network, no browser.
+
+Responsibility:
+- Verify conditional routing edges in the agent graph (planner to approval/actuator, approval to actuator/observer, reflector to planner/END).
+- Validate that reaching max_steps immediately forces completion without invoking the reflection LLM.
+
+What it must NOT do:
+- Must not make live LLM API calls or require network connectivity.
+- Must not launch Playwright browser processes.
+
+Next module to read:
+- graph.py (implements the state transitions and routing conditional functions).
+"""
 
 import pytest
 from langgraph.graph import END

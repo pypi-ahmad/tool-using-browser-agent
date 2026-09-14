@@ -1,227 +1,122 @@
-# Tool-Using Browser Agent
+# Tool-using browser agent
 
-An autonomous, tool-using browser agent built with **LangGraph**, **Playwright**, and **Streamlit** — it plans, acts, observes, and remembers its way through real web tasks like price comparison, form filling, and competitor research, with a human-in-the-loop safety gate before any sensitive action.
+Tool-using browser agent is a local-first web automation agent that executes browser-based tasks through a LangGraph state machine. It uses a local Ollama model to execute tool actions (navigation, clicking, text entry, and data extraction) and escalates to a cloud model (OpenAI or Agnes AI) for high-level task planning, reflection, and screenshot vision analysis. Automation runs via Playwright in headless Chromium with isolated browser contexts per tab, extracted tabular and text data is saved to a local SQLite database, and sensitive operations pause for human approval through a Streamlit web interface.
 
-**Repository:** [github.com/pypi-ahmad/tool-using-browser-agent](https://github.com/pypi-ahmad/tool-using-browser-agent)
+## Requirements
 
-Free, open-source, and community-driven — clone it, run it on your own machine with your own API
-keys, and use it however you like. Bug reports, feature ideas, and pull requests are genuinely
-welcome; see [Contributing & Community](#contributing--community) below.
+Runtime requirements derived from `pyproject.toml`, `run.cmd`, and source modules:
 
-> [!IMPORTANT]
-> This agent's planner and reflector always call a cloud LLM (OpenAI or Agnes AI), sending your
-> task, open tab URLs, and truncated page-content summaries on every step — plus full screenshots
-> when the vision fallback triggers. Only local Ollama handles the actual click/fill/navigate
-> execution first. You are fully responsible for the sites you point this at and the data involved.
-> Read [DISCLAIMER.md](DISCLAIMER.md) before running it on anything sensitive.
+- **Python:** Version `>=3.14` (specified in `pyproject.toml`).
+- **Package manager:** [uv](https://docs.astral.sh/uv/) (pinned via `uv.lock`).
+- **Browser binary:** Chromium managed by Playwright (`uv run playwright install chromium`).
+- **Local inference:** [Ollama](https://ollama.com/) accessible via HTTP (default: `http://localhost:11434`) with a tool-calling capable model available (default: `qwen3.5:9b`).
+- **Cloud API credentials:** An API key for either OpenAI (`OPENAI_API_KEY`) or Agnes AI (`AGNES_API_KEY`).
+- **Operating system:** Python source modules and CLI commands are platform-agnostic. The optional `run.cmd` script is Windows-specific.
 
-## Contents
+## Setup and run
 
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [How It Works](#how-it-works)
-- [Installation & Setup](#installation--setup)
-- [Environment Variables](#environment-variables)
-- [Usage](#usage)
-- [Configuration Options](#configuration-options)
-- [Testing](#testing)
-- [Future Improvements](#future-improvements)
-- [Contributing & Community](#contributing--community)
-- [Disclaimer](#disclaimer)
-- [License](#license)
+### Automated launch (Windows)
 
-## Features
+On Windows systems, execute the batch script from the repository root:
 
-- **Full browser toolset** — `navigate`, `click`, `fill`, `extract_text`, `extract_table`, `extract_links`, `scroll`, `wait_for_selector`, `go_back`/`go_forward`, `screenshot`, and multi-tab control (`open_new_tab`, `switch_tab`, `list_tabs`, `close_tab`).
-- **Multi-tab support** — the agent can open and work across several sites in parallel, each tab in its own isolated browser context.
-- **Hybrid model routing** — simple, repetitive actions (click/fill/navigate) go to a fast local Ollama model; planning, reflection, and vision go to a cloud model (OpenAI-compatible, or [Agnes AI](https://www.agnes-ai.com/en/docs/overview)). If the local model fails to produce a valid tool call, the action is automatically escalated to the cloud model.
-- **Vision fallback** — when a selector fails or the page looks broken (cookie banner, CAPTCHA, unfamiliar layout), the agent takes a screenshot and asks the vision model what to do next.
-- **Short-term + persistent memory** — an in-run action history and structured extracted-data list, backed by a SQLite store that survives across app restarts and is searchable from the UI.
-- **Human-in-the-loop approval** — any action that looks like a form submission or payment (keywords like "submit", "pay", "checkout", "place order") pauses the graph and waits for explicit Approve/Reject in the UI before executing.
-- **Live, step-by-step UI** — the action log, open tabs, extracted data, and screenshot preview update incrementally as each graph node completes, not just once the whole task finishes.
-- **Safety controls** — a configurable maximum step limit, a visible Stop button that halts the agent mid-run, and full action history for auditability.
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Frontend | [Streamlit](https://streamlit.io/) |
-| Agent orchestration | [LangGraph](https://github.com/langchain-ai/langgraph) (StateGraph, checkpointing, `interrupt`/`Command` human-in-the-loop) |
-| Browser automation | [Playwright](https://playwright.dev/python/) (async) |
-| Local LLM | [Ollama](https://ollama.com/) via `langchain-ollama` |
-| Cloud LLM | OpenAI-compatible API via `langchain-openai` (OpenAI, or [Agnes AI](https://www.agnes-ai.com/en/docs/agnes-25-flash)) |
-| Persistence | SQLite (stdlib `sqlite3`, no ORM) |
-| Package management | [uv](https://docs.astral.sh/uv/) |
-
-## Project Structure
-
-```
-Tool-Using Browser Agent/
-├── app.py                      # Streamlit UI + AgentRunner (background thread, live polling)
-├── graph.py                    # LangGraph state, nodes, and routing (the agent's core loop)
-├── tools/
-│   └── browser_tools.py        # BrowserSession (multi-tab Playwright) + LangChain tool wrappers
-├── memory.py                   # In-run short-term memory helpers (history trim, JSON/CSV export)
-├── persistence.py              # SQLite-backed long-term memory (save/search/list)
-├── vision.py                   # Screenshot -> vision-model analysis for stuck/broken pages
-├── config.py                   # Environment-driven settings and LLM factories
-├── utils.py                    # Small shared helpers (ids, base64, sensitive-action detection)
-├── tests/                      # pytest suite (real headless-browser tests, no LLM required)
-├── run.cmd                     # One-click setup + launch (Windows)
-├── pyproject.toml / uv.lock    # Dependencies (uv)
-└── .env.example                # Environment variable template
+```cmd
+run.cmd
 ```
 
-## How It Works
+This script checks for `uv`, creates `.env` from `.env.example` if `.env` does not exist, runs `uv sync --all-groups`, installs Playwright Chromium, and starts the Streamlit server on port `8511`.
 
-The agent is a [LangGraph](https://github.com/langchain-ai/langgraph) `StateGraph` with the following loop:
+### Manual launch (all platforms)
+
+1. Synchronize project dependencies:
+   ```bash
+   uv sync --all-groups
+   ```
+2. Install the Playwright Chromium browser:
+   ```bash
+   uv run playwright install chromium
+   ```
+3. Initialize the environment configuration file:
+   ```bash
+   cp .env.example .env
+   ```
+   *(On Windows Command Prompt, use `copy .env.example .env`)*
+4. Configure API keys in `.env` (see the configuration section below).
+5. Start the Streamlit application:
+   ```bash
+   uv run streamlit run app.py --server.port 8511
+   ```
+   Access the web interface at `http://localhost:8511`.
+
+## Configuration
+
+Configuration values are loaded from environment variables and `.env` via `python-dotenv` in `config.py`.
+
+| Variable | Default value | Purpose |
+| --- | --- | --- |
+| `CLOUD_PROVIDER` | `openai` | Cloud LLM provider for planning, reflection, and vision (`openai` or `agnes`). |
+| `OPENAI_API_KEY` | None | API key for OpenAI. Required if `CLOUD_PROVIDER=openai`. |
+| `OPENAI_BASE_URL` | None | Optional custom base URL for OpenAI-compatible proxies. |
+| `OPENAI_PLANNER_MODEL` | `gpt-4o` | Model identifier used for planning and reflection. |
+| `OPENAI_VISION_MODEL` | `gpt-4o` | Model identifier used for screenshot analysis (must support image inputs). |
+| `AGNES_API_KEY` | None | API key for Agnes AI. Required if `CLOUD_PROVIDER=agnes` (endpoint: `https://apihub.agnes-ai.com/v1`, model: `agnes-2.5-flash`). |
+| `OLLAMA_HOST` | `http://localhost:11434` | HTTP address of the local Ollama server. |
+| `OLLAMA_MODEL` | `qwen3.5:9b` | Default local model for actuator tool calls. UI choices: `qwen3.5:9b`, `qwen3.5:4b`, `ministral-3:8b`, `granite4.1:8b`, `qwen2.5:7b`, `llama3.1:8b`. |
+| `MAX_STEPS` | `25` | Maximum execution steps allowed per run before forcing task termination. |
+| `MEMORY_DB_PATH` | `./agent_memory.db` | File path for the persistent SQLite database storing extracted data records. |
+
+In addition to environment variables, `config.py` defines `SENSITIVE_KEYWORDS` (`"submit"`, `"pay"`, `"buy"`, `"confirm"`, `"purchase"`, `"checkout"`, `"place order"`), which automatically route actions to the human approval gate.
+
+## Repository map
+
+Important directories and files in the repository:
 
 ```
-planner ─▶ (sensitive?) ─▶ human_approval ─▶ browser_actuator ─▶ observer
-   ▲                              │                                  │
-   │                       (rejected: skip)                          ▼
-   │                                                          memory_updater
-   │                                                                  │
-   │                                                          persist_memory
-   │                                                                  │
-   └──────────────────────── reflector ◀────────────────────────────┘
-                          (continue | finish)
+.
+├── app.py                # Streamlit web interface and AgentRunner background worker thread
+├── config.py             # Settings dataclass, environment variable resolution, and LLM factories
+├── graph.py              # LangGraph state definition, node implementations, and routing edges
+├── memory.py             # In-memory history bounding and JSON/CSV export helpers
+├── persistence.py        # SQLite schema initialization, record insertion, and search operations
+├── utils.py              # Identifiers, base64 conversion, and sensitive keyword evaluation
+├── vision.py             # Screenshot encoding and cloud vision model query logic
+├── run.cmd               # Windows batch setup and launcher script
+├── pyproject.toml        # Project dependencies, packaging metadata, and tool configuration
+├── uv.lock               # Pinned dependency lockfile
+├── .env.example          # Environment variable template
+├── docs/                 # Detailed system documentation
+│   ├── ARCHITECTURE.md   # State machine, request flows, and component diagram
+│   ├── CONTRIBUTING.md   # Contribution guidelines, development setup, and code checks
+│   ├── RUNBOOK.md        # Operations, execution instructions, and error lookup table
+│   └── TECHNICAL.md      # Technical stack rationale, invariants, and persistence paths
+└── tools/
+    ├── __init__.py       # Package marker
+    └── browser_tools.py  # Playwright BrowserSession and LangChain tool wrappers
 ```
 
-Non-sensitive actions skip `human_approval` entirely (`planner → browser_actuator` directly);
-only actions flagged sensitive enter the approval gate shown above.
+## How to run tests
 
-- **`planner`** (cloud model) — reads the task, recent history, and live browser tab state, and decides the single next concrete action. Flags the action as sensitive if it looks like a submit/payment step.
-- **`human_approval`** — only entered for sensitive actions. Uses LangGraph's `interrupt()` to pause the graph and surface the action for approval in the UI; resumes via `Command(resume="approve" | "reject")`.
-- **`browser_actuator`** — translates the instruction into a concrete tool call. Tries the local Ollama model first (fast path); if it fails to produce a valid tool call, escalates to the cloud model. Catches Playwright errors and flags the step for vision analysis instead of crashing the run.
-- **`observer`** — captures the resulting page state, and if a vision flag was raised, calls the vision model with a screenshot to get unstuck.
-- **`memory_updater`** — deterministic (no LLM): trims short-term action history and appends new structured extractions.
-- **`persist_memory`** — deterministic: writes new extracted records to SQLite every pass, so a mid-run Stop doesn't lose data.
-- **`reflector`** (cloud model) — decides whether to continue, replan, or finish; also forces completion once the step limit is reached.
+Test dependencies are declared in `pyproject.toml` under `[dependency-groups] dev` (`pytest>=9.1.1` and `pytest-asyncio>=1.4.0`), with `[tool.pytest.ini_options]` setting `asyncio_mode = "auto"`.
 
-The Streamlit UI runs the agent in a background thread with its own asyncio event loop (Playwright requires this), and streams the graph with `astream(stream_mode="updates")` so the UI updates after every single node, not just when the whole multi-step task completes.
-
-See **[TECHNICAL.md](TECHNICAL.md)** for the full architecture reference — module map, every node's exact behavior, model routing, locator resolution, and extension points.
-
-## Installation & Setup
-
-### Prerequisites
-
-- [uv](https://docs.astral.sh/uv/) (Python package manager)
-- [Ollama](https://ollama.com/) running locally, with a tool-calling-capable model pulled (e.g. `ollama pull qwen2.5:7b`)
-- An OpenAI-compatible API key (OpenAI itself, an OpenAI-compatible proxy, or Agnes AI)
-
-### Windows: one-click setup
-
-Double-click **`run.cmd`**. It will:
-1. Check `uv` is installed.
-2. Create `.env` from `.env.example` on first run.
-3. Run `uv sync` to install dependencies.
-4. Install the Playwright Chromium browser.
-5. Launch the app at `http://localhost:8511`.
-
-### Manual setup (any OS)
+To invoke the test suite:
 
 ```bash
-uv sync --all-groups
-uv run playwright install chromium
-cp .env.example .env   # then fill in your API key(s)
-uv run streamlit run app.py --server.port 8511
+uv run pytest
 ```
 
-## Environment Variables
+*Verification status:* The test suite in `tests/` contains 15 unit tests covering browser tool operations, graph conditional routing, and persistence storage. Running `uv run pytest` executes and passes all 15 tests.
 
-| Variable | Default | Description |
-|---|---|---|
-| `CLOUD_PROVIDER` | `openai` | `openai` or `agnes` — which cloud provider powers planning/reflection/vision |
-| `OPENAI_API_KEY` | — | Required when `CLOUD_PROVIDER=openai` |
-| `OPENAI_BASE_URL` | — | Optional, for OpenAI-compatible proxies |
-| `OPENAI_PLANNER_MODEL` | `gpt-4o` | Model used for planning/reflection |
-| `OPENAI_VISION_MODEL` | `gpt-4o` | Model used for screenshot analysis (must support vision) |
-| `AGNES_API_KEY` | — | Required when `CLOUD_PROVIDER=agnes`. See [Agnes AI docs](https://www.agnes-ai.com/en/docs/overview) |
-| `OLLAMA_HOST` | `http://localhost:11434` | Ollama server URL |
-| `OLLAMA_MODEL` | `qwen3.5:9b` | Default local model (selectable in the UI) |
-| `MAX_STEPS` | `25` | Default maximum agent steps per task (also adjustable in the UI) |
-| `MEMORY_DB_PATH` | `./agent_memory.db` | SQLite file for persistent extracted data |
+## Known limitations
 
-Both `OPENAI_API_KEY`/`OPENAI_BASE_URL` and `AGNES_API_KEY` are read from real environment variables first — `.env` is only a fallback for values not already set in your shell/system environment.
+- **Process restart state loss:** LangGraph checkpointer is initialized as `InMemorySaver()`. In-flight agent graph state does not survive application crashes or restarts. Extracted records persisted to SQLite are preserved.
+- **Approval gate heuristics:** Sensitive action gating depends on string keyword matching (`SENSITIVE_KEYWORDS`) and model-declared booleans (`PlannerDecision.sensitive`), which do not guarantee detection of all consequential web actions.
+- **Mandatory external cloud dependency:** High-level planning (`planner_node`) and reflection (`reflector_node`) require an external OpenAI or Agnes AI API key; purely local operation using Ollama alone is not supported.
+- **Substring persistence search:** `persistence.py::search_memory` uses SQL `LIKE %...%` wildcard matching over serialized JSON, URLs, and task descriptions rather than indexed full-text or vector search.
+- **Static type diagnostics:** Running `uv run ty check .` yields 8 diagnostic messages in `graph.py`, `persistence.py`, and `tools/browser_tools.py`.
+- **Platform script limitation:** `run.cmd` is compatible only with Windows command interpreters. Other operating systems must run the manual commands listed in the setup section.
 
-## Usage
+## Documentation links
 
-1. Launch the app (`run.cmd` or `uv run streamlit run app.py`).
-2. Enter a task, e.g. *"Compare iPhone 16 prices on Amazon and Flipkart"*.
-3. Pick a local model, a cloud provider, and a step limit.
-4. Click **Start** and watch the live action log, open tabs, and extracted data update as the agent works.
-5. If the agent needs to submit a form or make a payment, it will pause and ask for **Approve**/**Reject**.
-6. Use **Stop** to halt the run at any time.
-7. Once finished, download the extracted data as JSON or CSV, or browse/search everything ever extracted in the **Persistent memory browser** panel.
-
-See **[USAGE.md](USAGE.md)** for a full walkthrough, more example tasks, and a troubleshooting table mapping each error to its fix.
-
-### Example tasks
-
-- "Compare iPhone 16 prices across Amazon and Flipkart."
-- "Fill out the demo request form on example.com with test data." *(will pause for approval before submitting)*
-- "Go to a competitor's pricing page and extract their plan names and prices."
-- "Open three product pages in separate tabs and summarize their key specs."
-
-## Configuration Options
-
-- **Local model** — any Ollama model with tool-calling support (selectable in the UI; extend `LOCAL_MODEL_CHOICES` in `config.py`).
-- **Cloud provider** — `openai` or `agnes`, selectable in the UI.
-- **Max steps** — per-run safety cap on total agent steps.
-- **Sensitive-action keywords** — edit `SENSITIVE_KEYWORDS` in `config.py` to change what triggers the approval gate.
-
-## Testing
-
-```bash
-uv run pytest tests/ -v
-```
-
-The suite runs real headless-browser tests (multi-tab, locator resolution), SQLite persistence roundtrips, and LangGraph routing/short-circuit logic (conditional edges, the max-steps force-finish) — no LLM or network access required.
-
-## Future Improvements
-
-- Parallel (concurrent, not just multi-tab-sequential) task execution across sites.
-- Semantic/fuzzy search over persistent memory (SQLite FTS5 or a vector store).
-- A persistent (non-in-memory) LangGraph checkpointer for durable, restart-safe approval flows.
-
-## Contributing & Community
-
-This project is free, open-source, and welcomes contributions of all sizes — bug reports, feature
-suggestions, documentation fixes, and code. It's maintained in spare time with no formal process,
-so don't overthink it: open an issue or a pull request.
-
-| Resource | Purpose |
-| --- | --- |
-| [USAGE.md](USAGE.md) | Full how-to guide, more example tasks, and troubleshooting |
-| [TECHNICAL.md](TECHNICAL.md) | Architecture reference: module map, every node's behavior, extension points |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup, project layout, coding style, and how to submit a PR |
-| [Issues](https://github.com/pypi-ahmad/tool-using-browser-agent/issues) | Bug reports and feature requests (templates provided for both) |
-| [SUPPORT.md](SUPPORT.md) | Where to ask usage questions and what response time to expect |
-| [SECURITY.md](SECURITY.md) | How to report a security issue privately, and known risks of an LLM-driven browser agent |
-
-> [!NOTE]
-> This project does not want or accept donations, sponsorships, or any other financial support, and
-> never will. It's free to use and free to modify. If you'd like to give back, the most valuable
-> thing you can do is contribute code, tests, docs, or a well-written bug report.
-
-## Disclaimer
-
-- **You run this on your own machine, with your own API keys.** There is no hosted version and no
-  account system.
-- **You are 100% responsible for the sites you point this at and the data involved.** The cloud
-  planner receives your task, tab URLs, and truncated page content on every step; only local Ollama
-  handles execution first.
-- **AI-driven actions can be wrong.** The human-in-the-loop approval gate is a safety net, not a
-  guarantee — review every approval prompt.
-- **No warranty, no liability**, per the [MIT License](LICENSE) — use it at your own risk.
-
-See [DISCLAIMER.md](DISCLAIMER.md) for the full version.
-
-## License
-
-[MIT](LICENSE)
-
-<p align="center">Made with ❤️ by Ahmad Mujtaba</p>
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [docs/TECHNICAL.md](docs/TECHNICAL.md)
+- [docs/RUNBOOK.md](docs/RUNBOOK.md)
+- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)

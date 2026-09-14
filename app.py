@@ -1,14 +1,16 @@
-"""Streamlit frontend: task input, live agent view, human-approval prompts,
-persistent memory browser, and result downloads.
+"""Streamlit frontend and execution coordinator for the browser agent.
 
-Run with: streamlit run app.py
+Responsibility:
+- Render user interface: task submission form, live state visualizer, human-approval dialogs, results download, and SQLite memory browser.
+- Manage AgentRunner background daemon threads and dedicated asyncio event loops.
+- Bridge thread-safe communication between asynchronous agent tasks and Streamlit's rerun cycle.
 
-Workers (AgentRunner._run) must never call st.* — Streamlit APIs only work on the
-main script thread. The agent runs in its own daemon thread with its own asyncio
-event loop (Playwright async requires the same loop for the life of the browser),
-and the UI polls a lock-guarded snapshot. Pattern based on the background-job
-registry in D:\\AI\\Github\\local-ai-chat-studio\\src\\jobs.py, adapted from
-sync-streaming-to-a-registry to async-graph-to-a-snapshot.
+What it must NOT do:
+- Workers (AgentRunner._run) must never call st.* APIs directly (Streamlit requires main-thread calls).
+- Streamlit script thread must not access or mutate runner state without acquiring runner._lock.
+
+Next module to read:
+- graph.py (defines the core agent loop and state machine driven by AgentRunner).
 """
 
 from __future__ import annotations
@@ -51,6 +53,10 @@ class AgentRunner:
         self.max_steps = max_steps
         self.session_id = uuid.uuid4().hex[:8]
 
+        # Every field below is written from this worker thread and read from the
+        # Streamlit main thread's polling (snapshot()) — all reads/writes of them
+        # must go through self._lock. self._approval_event is what human_approval's
+        # interrupt() blocks on until submit_approval() is called from the UI.
         self._lock = threading.Lock()
         self._approval_event = threading.Event()
         self.status = "running"
@@ -63,6 +69,9 @@ class AgentRunner:
         self._resume_decision: str | None = None
         self._stop_requested = False
 
+        # Side-effecting on purpose: the run starts immediately inside __init__.
+        # By the time AgentRunner(...) returns, the agent is already executing on
+        # its own thread — there is no separate "start()" step.
         self._thread = threading.Thread(target=self._run_in_thread, daemon=True)
         self._thread.start()
 
@@ -89,6 +98,9 @@ class AgentRunner:
             }
 
     def _run_in_thread(self) -> None:
+        # Must create the loop here, inside the worker thread — Playwright's async
+        # API binds to whichever loop is active when the browser is launched, and
+        # that has to be this thread's loop, not Streamlit's main-thread loop (if any).
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
@@ -167,6 +179,10 @@ class AgentRunner:
                             return
                         decision = self._resume_decision
                         self.status = "running"
+                    # Resuming an interrupted LangGraph run means calling astream()
+                    # again with a Command(resume=...) instead of the original state
+                    # dict — the checkpointer (keyed by thread_id) reattaches this to
+                    # exactly where human_approval_node's interrupt() call paused.
                     graph_input = Command(resume=decision)
                     continue
 

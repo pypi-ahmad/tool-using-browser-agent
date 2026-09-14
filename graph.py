@@ -1,8 +1,22 @@
 """LangGraph state, nodes, and routing for the browser agent.
 
-planner -> browser_actuator -> observer -> memory_updater -> persist_memory ->
-reflector -> (planner | END). Human approval is added on top of this in a later
-pass.
+State machine flow:
+START -> planner -> (human_approval, only if action is sensitive) ->
+browser_actuator -> observer -> memory_updater -> persist_memory -> reflector ->
+(planner | END).
+
+Responsibility:
+- Define AgentState schema and initialize default state.
+- Implement graph nodes: planning, approval interrupt, tool actuation, observation, memory updates, SQLite persistence, and reflection.
+- Route conditional edges based on action sensitivity, human approval, and task completion.
+
+What it must NOT do:
+- Must not instantiate browser processes directly (delegated to BrowserSession in tools/browser_tools.py).
+- Must not interact directly with Streamlit UI elements (delegated to app.py).
+
+Next module to read:
+- tools/browser_tools.py (implements browser manipulation actions executed by browser_actuator_node).
+- config.py (supplies LLM models injected into RunnableConfig).
 """
 
 from __future__ import annotations
@@ -23,18 +37,21 @@ from persistence import save_record
 from utils import bytes_to_b64, is_sensitive_text, utc_now_iso
 from vision import analyze_screenshot
 
+# Must match tool names in tools/browser_tools.py::build_tools exactly — this is
+# how memory_updater_node decides which tool results count as "extracted data"
+# worth keeping (and persisting to SQLite) rather than a plain navigation/click step.
 EXTRACTION_TOOLS = {"extract_text", "extract_table", "extract_links", "screenshot"}
 
 
 class AgentState(TypedDict):
     task: str
     next_action: dict[str, Any] | None
-    tabs: dict[str, str]
+    tabs: dict[str, str]  # mirror of BrowserSession.list_tabs(); may lag by one step, see planner_node
     active_tab: str | None
     action_history: list[dict]
     extracted_data: list[dict]
-    persisted_count: int
-    page_memory: dict[str, dict]
+    persisted_count: int  # watermark: extracted_data[:persisted_count] is already in SQLite
+    page_memory: dict[str, dict]  # url -> {"last_visited": iso_timestamp}
     last_observation: dict | None
     needs_vision: bool
     screenshot_b64: str | None
@@ -86,6 +103,10 @@ class ReflectorDecision(BaseModel):
 
 
 def _recent_history_text(state: AgentState, limit: int = 6) -> str:
+    # result_summary and vision_guidance originate from live page content and
+    # screenshots (untrusted — the browser can land on any site the task visits),
+    # and are folded verbatim into the planner/reflector prompt below. This is the
+    # code-level surface for the prompt-injection risk documented in ../SECURITY.md.
     entries = state["action_history"][-limit:]
     if not entries:
         return "(no actions yet)"
@@ -147,6 +168,10 @@ def route_after_planner(
 
 async def human_approval_node(state: AgentState, config: RunnableConfig) -> dict:
     action = state["next_action"]
+    # interrupt() suspends the whole graph run here and re-raises out to app.py's
+    # astream() loop as a GraphInterrupt (surfaced there as chunk["__interrupt__"]).
+    # This node only resumes — with `decision` bound to whatever value was passed —
+    # once the app sends Command(resume=decision) back into the *same* thread_id.
     decision = interrupt(
         {
             "type": "approval_required",
@@ -218,6 +243,10 @@ async def browser_actuator_node(state: AgentState, config: RunnableConfig) -> di
                 result = await tool.ainvoke(call["args"])
                 result_summary = str(result)[:500]
             except (PlaywrightError, ValueError) as exc:
+                # Deliberately narrow: PlaywrightError covers browser/selector
+                # failures, ValueError covers BrowserSession's own unknown-tab_id
+                # checks. Anything else is treated as a real bug and propagates
+                # instead of being absorbed into the vision-recovery path below.
                 error = str(exc)
                 result_summary = ""
 
@@ -227,6 +256,9 @@ async def browser_actuator_node(state: AgentState, config: RunnableConfig) -> di
         try:
             screenshot_b64 = bytes_to_b64(await session.screenshot())
         except PlaywrightError:
+            # Best-effort: if even the recovery screenshot fails (e.g. the tab
+            # closed itself), fall through with the previous screenshot rather
+            # than raising — observer_node just won't get fresh vision guidance.
             pass
 
     return {
@@ -330,6 +362,8 @@ async def persist_memory_node(state: AgentState, config: RunnableConfig) -> dict
 
 
 async def reflector_node(state: AgentState, config: RunnableConfig) -> dict:
+    # Short-circuit before touching the model once the step cap is hit — the
+    # outcome is forced either way, so there's no reason to pay for an LLM call.
     if state["step_count"] >= state["max_steps"]:
         return {"status": "done", "error": state["error"]}
 
@@ -378,4 +412,7 @@ def build_graph():
     graph.add_edge("persist_memory", "reflector")
     graph.add_conditional_edges("reflector", route_after_reflector, ["planner", END])
 
+    # InMemorySaver: checkpoint state lives only in this process's memory, keyed by
+    # thread_id (session_id). A process restart mid-run loses it — already-extracted
+    # records are still safe, since persist_memory_node writes those to SQLite every pass.
     return graph.compile(checkpointer=InMemorySaver())

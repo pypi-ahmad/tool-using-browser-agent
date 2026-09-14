@@ -1,4 +1,16 @@
-"""Real headless-Playwright smoke test. No LLM, no network beyond data: URLs."""
+"""Real headless-Playwright smoke test. No LLM, no network beyond data: URLs.
+
+Responsibility:
+- Exercise BrowserSession lifecycle (startup, tab creation, tab switching, close) in headless Chromium.
+- Verify text extraction and locator fallback resolution on isolated data: URI pages.
+
+What it must NOT do:
+- Must not make external network requests or depend on third-party live websites.
+- Must not invoke LLM APIs.
+
+Next module to read:
+- tools/browser_tools.py (implements the tested BrowserSession class).
+"""
 
 import pytest
 
