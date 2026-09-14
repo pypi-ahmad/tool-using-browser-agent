@@ -1,8 +1,16 @@
 """Async Playwright browser control: multi-tab session + LangChain tool wrappers.
 
-Locator-resolution fallback chain (role -> text/label/placeholder -> raw selector)
-ported from the sync BrowserController in
-D:\\AI\\Github\\genai-systems-lab\\genai-browser-agent\\app\\browser.py.
+Responsibility:
+- Manage the Playwright Chromium browser lifecycle, tab creation, and isolation.
+- Provide a robust multi-tier fallback locator chain (ARIA role -> text/label/placeholder -> raw CSS/XPath).
+- Expose LangChain @tool wrappers for agent planning and execution.
+
+What it must NOT do:
+- Must not make LLM calls or manage LangGraph agent state.
+- Must not be accessed across multiple threads or asyncio event loops simultaneously.
+
+Next module to read:
+- graph.py (see browser_actuator_node, where these tools are bound and called).
 """
 
 from __future__ import annotations
@@ -16,7 +24,11 @@ from utils import bytes_to_b64, new_id
 
 
 class BrowserSession:
-    """Owns one Playwright browser and all its tabs. Lives in one background thread."""
+    """Owns one Playwright browser and all its tabs. Lives in one background thread.
+
+    Must not be driven from more than one asyncio event loop/thread at a time —
+    Playwright's async objects are bound to the loop that created them.
+    """
 
     def __init__(self, headless: bool = True) -> None:
         self.headless = headless
@@ -97,6 +109,8 @@ class BrowserSession:
     async def scroll(
         self, direction: str = "down", amount: int = 800, tab_id: str | None = None
     ) -> None:
+        # Units boundary: amount is in vertical viewport pixels.
+        # Positive dy scrolls downwards; negative dy scrolls upwards.
         page = self._page(tab_id)
         dy = amount if direction == "down" else -amount
         await page.mouse.wheel(0, dy)
@@ -104,6 +118,7 @@ class BrowserSession:
     async def wait_for_selector(
         self, selector: str, timeout: int = 5000, tab_id: str | None = None
     ) -> None:
+        # Units boundary: timeout is in milliseconds (default 5000ms = 5 seconds).
         page = self._page(tab_id)
         await page.wait_for_selector(selector, timeout=timeout)
 
@@ -113,6 +128,9 @@ class BrowserSession:
 
     @staticmethod
     async def _first_visible(locator: Locator) -> Locator | None:
+        # Every fallback candidate below is filtered through this, so a hidden
+        # duplicate element earlier in the DOM (e.g. a mobile-nav copy of a link)
+        # never wins over a later, actually-visible match.
         if await locator.count() > 0 and await locator.first.is_visible():
             return locator.first
         return None
@@ -210,7 +228,12 @@ class BrowserSession:
 
 
 def build_tools(session: BrowserSession) -> list[Any]:
-    """LangChain tool wrappers closed over one BrowserSession, for bind_tools()."""
+    """LangChain tool wrappers closed over one BrowserSession, for bind_tools().
+
+    Every @tool docstring below is what the LLM sees as that tool's description —
+    edit them for the model, not for a human reader. Names must stay in sync with
+    graph.py's EXTRACTION_TOOLS set for extract_text/extract_table/extract_links/screenshot.
+    """
 
     @tool
     async def navigate(url: str, tab_id: str | None = None) -> str:
